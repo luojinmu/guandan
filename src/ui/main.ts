@@ -20,6 +20,7 @@ import {
 } from '../game/tribute.js';
 import { AiDifficulty, chooseAiPlay } from '../game/ai.js';
 import { sfx } from './sound.js';
+import { fetchRemoteRecords, pushRemoteRecord, supabaseEnabled } from '../db.js';
 
 interface SeatUi { kind: 'human' | 'ai'; diff: AiDifficulty }
 
@@ -415,9 +416,26 @@ function onRoundEnd(): void {
       };
       M.records = [rec, ...M.records].slice(0, 30);
       saveRecords(M.records);
+      void pushRemoteRecord({ winnerTeam: res.winnerTeam!, rounds: M.match!.roundNo, levels: res.levelsAfter });
     }
   }
   render();
+}
+
+/** 若配置了 Supabase：启动时拉取远端战绩并合并展示 */
+async function syncRemoteOnBoot(): Promise<void> {
+  if (!supabaseEnabled) return;
+  const rows = await fetchRemoteRecords();
+  if (rows && rows.length > 0) {
+    M.records = rows.map((r) => ({
+      at: Number.isNaN(Date.parse(r.created_at)) ? 0 : Date.parse(r.created_at),
+      winnerTeam: r.winner_team,
+      rounds: r.rounds,
+      levels: [r.level_0, r.level_1],
+    }));
+    saveRecords(M.records);
+    if (M.screen === 'setup') render();
+  }
 }
 
 function actorSeat(): number {
@@ -573,3 +591,4 @@ app.addEventListener('change', (e) => {
 
 if (!M.seats.length) M.seats = Array.from({ length: 4 }, () => ({ kind: 'human', diff: 'easy' as AiDifficulty }));
 render();
+void syncRemoteOnBoot();
