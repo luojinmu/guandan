@@ -114,9 +114,16 @@ function renderSetup(): void {
         <span style="color:#888">${r.rounds} 副 · ${new Date(r.at).toLocaleString('zh-CN')}</span>
       </div>`).join('')
     : '<p style="color:#888;font-size:13px">暂无战绩，先来一局吧</p>';
+  const demo: Card[] = [
+    { suit: 'H', rank: 9 }, { suit: 'S', rank: 14 }, { suit: 'D', rank: 12 },
+    { suit: 'C', rank: 10 }, { suit: 'JOKER', rank: 16 }, { suit: 'JOKER', rank: 17 },
+  ];
   app.innerHTML = `
   <div class="screen">
     <h1 style="text-align:center">🃏 掼蛋</h1>
+    <div class="panel"><h2>牌面预览</h2>
+      <div style="display:flex;gap:7px;justify-content:center">${demo.map((c) => cardHtml(c, false, false, false, '')).join('')}</div>
+    </div>
     <div class="panel"><h2>万能牌（级牌）规则</h2>
       <div class="row-opts">
         <label><input type="radio" name="wild" value="all-level" checked /> 全级牌万能（4 张）</label>
@@ -136,10 +143,21 @@ const SUIT_SYM: Record<string, string> = { S: '♠', H: '♥', D: '♦', C: '♣
 const RANK_CN = ['', '头游', '二游', '三游', '末游'];
 
 function cardHtml(c: Card, wild: boolean, selected: boolean, pick: boolean, key: string, mini = false): string {
-  const red = c.suit === 'H' || c.suit === 'D';
-  const face = c.rank === 16 ? '小' : c.rank === 17 ? '大' : rankLabel(c.rank);
-  return `<span class="card ${red ? 'red' : ''} ${selected ? 'sel' : ''} ${wild ? 'wild' : ''} ${pick ? 'pick' : ''} ${mini ? 'mini' : ''}" data-key="${key}">
-    <b>${face}</b><i>${SUIT_SYM[c.suit] ?? ''}</i>
+  const joker = c.rank >= 16;
+  const red = c.suit === 'H' || c.suit === 'D' || (joker && c.rank === 17);
+  const cls = joker ? (c.rank === 17 ? 'joker-big' : 'joker-small') : red ? 'red' : 'black';
+  const sym = SUIT_SYM[c.suit] ?? '';
+  const face = joker ? (c.rank === 16 ? '小' : '大') : rankLabel(c.rank);
+  const selCls = `${selected ? ' sel' : ''}${wild ? ' wild' : ''}${pick ? ' pick' : ''}`;
+  if (mini) {
+    return `<span class="card mini ${cls}${selCls}" data-key="${key}">
+      <b class="idx">${face}</b><span class="center">${joker ? '★' : sym}</span>
+    </span>`;
+  }
+  return `<span class="card ${cls}${selCls}" data-key="${key}">
+    <b class="idx">${face}</b><i class="pip-mini">${sym}</i>
+    <span class="center">${joker ? '★' : sym}</span>
+    <b class="idx br">${face}</b><i class="pip-mini br">${sym}</i>
   </span>`;
 }
 
