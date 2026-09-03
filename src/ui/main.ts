@@ -8,17 +8,26 @@ import './style.css';
 import { Card, cardLabel, rankLabel, sortByRank } from '../rules/cards.js';
 import { isWildcard } from '../rules/config.js';
 import { hint } from '../rules/legal.js';
+import { PlayedHand } from '../rules/types.js';
 import {
-  MatchState, beginRound, createMatch, isActive, roundRules, teamOf, tributeCandidates,
+  MatchState, RoundState, beginRound, createMatch, isActive, roundRules, teamOf, tributeCandidates,
 } from '../game/match.js';
-import { tryPass, tryPlay, isLeading } from '../game/play.js';
+import { tryPass, tryPlay, isLeading, remainingCards } from '../game/play.js';
 import { settleRound } from '../game/settle.js';
 import {
   autoResolveCurrentStep, returnCandidates, tryReturn, tryTribute,
 } from '../game/tribute.js';
 import { AiDifficulty, chooseAiPlay } from '../game/ai.js';
+import { sfx } from './sound.js';
 
 interface SeatUi { kind: 'human' | 'ai'; diff: AiDifficulty }
+
+interface MatchRecord {
+  at: number;
+  winnerTeam: number;
+  rounds: number;
+  levels: [number, number];
+}
 
 interface Model {
   screen: 'setup' | 'table';
@@ -26,15 +35,46 @@ interface Model {
   seats: SeatUi[];
   sel: number[];
   toast: string;
+  showCounter: boolean;
+  sound: boolean;
+  records: MatchRecord[];
+  savedAt: boolean;
   settled: {
     ranks: number[]; levels: [number, number]; up: number;
     winnerTeam: number | null; matchOver: boolean;
   } | null;
 }
 
-const M: Model = { screen: 'setup', match: null, seats: [], sel: [], toast: '', settled: null };
+const LS_RECORDS = 'guandan-records';
+const LS_SOUND = 'guandan-sound';
+
+function loadRecords(): MatchRecord[] {
+  try { return JSON.parse(localStorage.getItem(LS_RECORDS) ?? '[]') as MatchRecord[]; } catch { return []; }
+}
+function saveRecords(rs: MatchRecord[]): void {
+  localStorage.setItem(LS_RECORDS, JSON.stringify(rs.slice(0, 30)));
+}
+
+const M: Model = {
+  screen: 'setup', match: null, seats: [], sel: [], toast: '', showCounter: false,
+  sound: localStorage.getItem(LS_SOUND) !== '0',
+  records: loadRecords(), savedAt: false, settled: null,
+};
 const app = document.getElementById('app')!;
 const SEAT_NAMES = ['南', '西', '北', '东'];
+
+const TYPE_CN: Record<PlayedHand['type'], string> = {
+  single: '单张', pair: '对子', triple: '三张', tripleWithPair: '三带二',
+  straight: '顺子', pairStraight: '连对', tripleStraight: '钢板',
+  straightFlush: '同花顺', bomb: '炸弹', royal: '天王炸',
+};
+
+function describePlay(p: PlayedHand): string {
+  const isRun = p.type === 'straight' || p.type === 'pairStraight' || p.type === 'tripleStraight';
+  const val = p.type === 'bomb' ? `${p.size}炸${rankLabel(p.mainRank)}` : rankLabel(p.mainRank);
+  const extra = isRun ? `（顶${rankLabel(p.top)}）` : p.type === 'straightFlush' ? `（顶${rankLabel(p.top)}）` : '';
+  return `${TYPE_CN[p.type]} ${isRun ? '' : val}${extra}`;
+}
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -65,6 +105,14 @@ function seatRowHtml(i: number): string {
 }
 
 function renderSetup(): void {
+  const winTxt = (team: number) => (team === 0 ? '南北方队' : '东西方队');
+  const recs = M.records.length
+    ? M.records.slice(0, 12).map((r) => `
+      <div class="rec-item">
+        <span>${winTxt(r.winnerTeam)} 打过 A</span>
+        <span style="color:#888">${r.rounds} 副 · ${new Date(r.at).toLocaleString('zh-CN')}</span>
+      </div>`).join('')
+    : '<p style="color:#888;font-size:13px">暂无战绩，先来一局吧</p>';
   app.innerHTML = `
   <div class="screen">
     <h1 style="text-align:center">🃏 掼蛋</h1>
@@ -75,7 +123,10 @@ function renderSetup(): void {
       </div></div>
     <div class="panel"><h2>座位设置（对家为队友）</h2>
       ${seatRowHtml(0)}${seatRowHtml(1)}${seatRowHtml(2)}${seatRowHtml(3)}
+      <div style="margin-top:8px"><label class="opts"><input type="checkbox" name="sound" ${M.sound ? 'checked' : ''} /> 音效</label></div>
       <p style="font-size:12px;opacity:.85">同屏模式：轮到谁就把手机交给谁；AI 座位自动出牌。</p></div>
+    <div class="panel"><h2>战绩（最近 ${M.records.length} 场）<button class="ghost" style="float:right;padding:2px 8px;font-size:12px" data-act="clear-rec">清除</button></h2>
+      ${recs}</div>
     <button class="primary" style="width:100%;padding:12px" data-act="start">开始</button>
   </div>`;
 }
@@ -176,11 +227,16 @@ function renderTable(): void {
   }
 
   const toast = M.toast ? `<div class="toast">${esc(M.toast)}</div>` : '';
+  const counterHtml = M.showCounter ? counterOverlay(round) : '';
   app.innerHTML = `
     <div class="table">
       <div class="topbar">
         <span>第 ${match.roundNo} 副 · 打 <b class="level-big">${levelLabel(round.level)}</b></span>
         <span>🔴 ${levelLabel(match.teamLevels[t0])} · 🔵 ${levelLabel(match.teamLevels[t0 === 0 ? 1 : 0])}</span>
+        <span>
+          <button class="mini" data-act="counter">${M.showCounter ? '关记牌' : '记牌'}</button>
+          <button class="mini" data-act="menu">菜单</button>
+        </span>
       </div>
       <div class="status">${esc(status)}</div>
       <div class="mid">
@@ -193,16 +249,47 @@ function renderTable(): void {
       </div>
       ${bottom}
       ${toast}
+      ${counterHtml}
     </div>`;
   void order; void southS;
+}
+
+/** 记牌器浮层：剩余牌统计 + 本副日志 */
+function counterOverlay(round: RoundState): string {
+  const rem = remainingCards(round);
+  const cells: string[] = [];
+  const add = (r: number, label: string) => {
+    const n = rem.get(r) ?? 0;
+    const lv = r === round.level ? 'lv' : '';
+    cells.push(`<div class="counter-cell ${n === 0 ? 'zero' : ''} ${lv}"><b>${label}</b><span class="num">${n}</span></div>`);
+  };
+  for (let r = 2; r <= 14; r++) add(r, r === 14 ? 'A' : rankLabel(r));
+  add(16, '小王');
+  add(17, '大王');
+  const logs = round.log.slice(-16).map((e) => {
+    const who = SEAT_NAMES[e.seat];
+    return e.pass ? `${who} 过` : `${who} ${describePlay(e.play!)}`;
+  }).join('<br/>') || '尚无出牌';
+  return `
+    <div class="overlay" data-act="counter-bg">
+      <div class="box overlay-scroll">
+        <h2 style="margin-top:0">记牌器</h2>
+        <p style="margin:0 0 4px;font-size:12px;color:#888">本副打 ${rankLabel(round.level)} · 剩余张数（深色=级牌）</p>
+        <div class="counter-grid">${cells.join('')}</div>
+        <h3 style="margin:6px 0 4px;font-size:13px">本副日志</h3>
+        <div class="log-list">${logs}</div>
+        <button class="ghost" style="width:100%;margin-top:10px" data-act="counter">关闭</button>
+      </div>
+    </div>`;
 }
 
 function renderSettled(): void {
   const s = M.settled!;
   const lines = s.ranks.map((r, i) =>
     `<div>${SEAT_NAMES[i]} 方 — 第${'一二三四'[r - 1] ?? '?'}游${r === 1 ? ' 🏆' : ''}</div>`).join('');
+  const confetti = s.matchOver ? '<div class="win-confetti">🎉🎉🎉</div>' : '';
   const title = s.matchOver
-    ? `<h2 style="color:#a33">🏆 ${s.winnerTeam === teamOf(0) ? '南北方队' : '东西方队'} 打过 A 获胜！</h2>`
+    ? `<h2 style="color:#a33">${confetti}<br/>${s.winnerTeam === teamOf(0) ? '南北方队' : '东西方队'} 打过 A 获胜！</h2>`
     : `<h2>本副结束</h2>`;
   app.innerHTML = `
     <div class="overlay">
@@ -211,7 +298,8 @@ function renderSettled(): void {
         <div class="ranks-list">${lines}</div>
         <p>🔴 ${levelLabel(s.levels[0])} · 🔵 ${levelLabel(s.levels[1])}${s.up > 0 ? `（头游方 +${s.up} 级）` : ''}</p>
         ${s.matchOver
-          ? '<button class="primary" style="width:100%" data-act="restart">再来一局</button>'
+          ? '<div><button class="primary" style="width:100%" data-act="restart">再来一局</button>' +
+            '<button class="ghost" style="width:100%;margin-top:8px" data-act="menu">回菜单看战绩</button></div>'
           : '<button class="primary" style="width:100%" data-act="next">下一副</button>'}
       </div>
     </div>`;
@@ -233,6 +321,8 @@ function startGame(): void {
   M.sel = [];
   M.settled = null;
   M.toast = '';
+  M.showCounter = false;
+  M.savedAt = false;
   M.screen = 'table';
   beginRound(M.match);
   drainAI();
@@ -277,6 +367,20 @@ function onRoundEnd(): void {
     winnerTeam: res.winnerTeam,
     matchOver: res.matchOver,
   };
+  if (res.matchOver) {
+    if (M.sound) sfx('win');
+    if (!M.savedAt) {
+      M.savedAt = true;
+      const rec: MatchRecord = {
+        at: Date.now(),
+        winnerTeam: res.winnerTeam!,
+        rounds: M.match!.roundNo,
+        levels: res.levelsAfter,
+      };
+      M.records = [rec, ...M.records].slice(0, 30);
+      saveRecords(M.records);
+    }
+  }
   render();
 }
 
@@ -299,7 +403,8 @@ function actOnCard(idx: number): void {
     const r = round.tribute!.steps[round.tributeStep]!.type === 'give'
       ? tryTribute(match, seat, card)
       : tryReturn(match, seat, card);
-    if (!r.ok) { M.toast = r.error ?? '操作不合法'; render(); return; }
+    if (!r.ok) { M.toast = r.error ?? '操作不合法'; if (M.sound) sfx('pass'); render(); return; }
+    if (M.sound) sfx('click');
     M.sel = [];
     if (round.phase === 'tribute') render();
     else drainAI();
@@ -308,7 +413,7 @@ function actOnCard(idx: number): void {
 
   const i = M.sel.indexOf(idx);
   if (i >= 0) M.sel.splice(i, 1);
-  else M.sel.push(idx);
+  else { M.sel.push(idx); if (M.sound) sfx('click'); }
   render();
 }
 
@@ -338,8 +443,15 @@ function doPlay(): void {
   const cards = M.sel.map((i) => sortedHand(seat)[i]!).filter(Boolean);
   M.sel = [];
   const r = tryPlay(match, seat, cards);
-  if (r.ok) { M.toast = ''; drainAI(); }
-  else { M.toast = r.error ?? '出牌不合法'; render(); }
+  if (r.ok) {
+    M.toast = '';
+    if (M.sound) {
+      const p = round.trick.lastPlay;
+      if (p && (p.type === 'bomb' || p.type === 'straightFlush' || p.type === 'royal')) sfx('bomb');
+      else sfx('play');
+    }
+    drainAI();
+  } else { M.toast = r.error ?? '出牌不合法'; if (M.sound) sfx('pass'); render(); }
 }
 
 function doPass(): void {
@@ -348,7 +460,7 @@ function doPass(): void {
   const seat = actorSeat();
   const r = tryPass(match, seat);
   M.sel = [];
-  if (r.ok) { M.toast = ''; drainAI(); }
+  if (r.ok) { M.toast = ''; if (M.sound) sfx('pass'); drainAI(); }
   else { M.toast = r.error ?? '不能过牌'; render(); }
 }
 
@@ -373,8 +485,30 @@ app.addEventListener('click', (e) => {
     M.match = null;
     M.settled = null;
     M.sel = [];
+    M.showCounter = false;
     M.screen = 'setup';
     return render();
+  }
+  if (act === 'menu') {
+    M.match = null;
+    M.settled = null;
+    M.sel = [];
+    M.showCounter = false;
+    M.screen = 'setup';
+    return render();
+  }
+  if (act === 'clear-rec') {
+    M.records = [];
+    saveRecords([]);
+    return render();
+  }
+  if (act === 'counter') {
+    M.showCounter = !M.showCounter;
+    return render();
+  }
+  if (act === 'counter-bg') {
+    if (e.target === el) { M.showCounter = false; render(); }
+    return;
   }
   if (act === 'next') {
     M.settled = null;
@@ -391,6 +525,14 @@ app.addEventListener('click', (e) => {
   if (act === 'autop') return autoPlay();
   const key = el.dataset.key;
   if (key && key.startsWith('c')) actOnCard(Number(key.slice(1)));
+});
+
+app.addEventListener('change', (e) => {
+  const t = e.target as HTMLInputElement | null;
+  if (t && t.name === 'sound') {
+    M.sound = t.checked;
+    localStorage.setItem(LS_SOUND, M.sound ? '1' : '0');
+  }
 });
 
 if (!M.seats.length) M.seats = Array.from({ length: 4 }, () => ({ kind: 'human', diff: 'easy' as AiDifficulty }));

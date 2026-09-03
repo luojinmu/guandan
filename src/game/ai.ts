@@ -7,7 +7,7 @@
 
 import { Card } from '../rules/cards.js';
 import { RulesConfig } from '../rules/config.js';
-import { allPlays, hint } from '../rules/legal.js';
+import { allPlays } from '../rules/legal.js';
 import { PlayedHand } from '../rules/types.js';
 
 export type AiDifficulty = 'easy' | 'medium' | 'hard';
@@ -22,32 +22,31 @@ export function chooseAiPlay(
   if (lead) {
     const plays = allPlays(hand, cfg, lead);
     if (plays.length === 0) return null;
-    // 简单/中等优先不浪费炸弹：非必要不开火（hard 会用小炸抢牌权）
+    // 简单/中等优先不浪费炸弹：非必要不开火
     const filtered = difficulty === 'easy' ? plays.filter((p) => p.type !== 'bomb' && p.type !== 'straightFlush' && p.type !== 'royal') : plays;
     const pool = filtered.length > 0 ? filtered : plays;
     pool.sort((a, b) => score(a, cfg) - score(b, cfg));
     return pool[0]!.cards;
   }
-  // 领出：简单=最小单张；中等/困难=倾向先出对子/单张小牌，避免浪费大牌
+  // 领出：简单=最小单张；中等/困难=先出最小对子，无对再出最小单张
   const plays = allPlays(hand, cfg);
   if (plays.length === 0) return null;
-  if (difficulty === 'easy') return plays.filter((p) => p.type === 'single').sort((a, b) => score(a, cfg) - score(b, cfg))[0]?.cards ?? null;
-  const preferred = plays.filter((p) => p.type === 'pair' || p.type === 'single')
-    .filter((p) => p.type === 'single' ? isSmall(p, cfg) : true)
-    .sort((a, b) => score(a, cfg) - score(b, cfg));
-  const pool = preferred.length > 0 ? preferred : plays;
-  pool.sort((a, b) => score(a, cfg) - score(b, cfg));
-  return pool[0]!.cards;
+  const byValue = (a: PlayedHand, b: PlayedHand) => valueOf(a, cfg) - valueOf(b, cfg) || a.cards.length - b.cards.length;
+  if (difficulty !== 'easy') {
+    const pairs = plays.filter((p) => p.type === 'pair').sort(byValue);
+    if (pairs.length > 0) return pairs[0]!.cards;
+  }
+  const singles = plays.filter((p) => p.type === 'single').sort(byValue);
+  if (singles.length > 0) return singles[0]!.cards;
+  return plays.sort(byValue)[0]!.cards;
 }
 
-/** 提示用：同 legal.hint 的最小可压 */
-export function aiHint(hand: readonly Card[], cfg: RulesConfig, lead: PlayedHand | null): string[] | null {
-  return hint(hand, cfg, lead ?? undefined);
-}
-
-function isSmall(p: PlayedHand, cfg: RulesConfig): boolean {
-  const v = p.mainRank === cfg.level ? 15 : p.mainRank;
-  return v <= 8;
+/** 点数强度（级牌 15 / 王 16/17），用于领出偏好排序 */
+function valueOf(p: PlayedHand, cfg: RulesConfig): number {
+  const rank = p.type === 'straight' || p.type === 'pairStraight' || p.type === 'tripleStraight' || p.type === 'straightFlush'
+    ? p.top
+    : p.mainRank;
+  return rank === cfg.level ? 15 : rank;
 }
 
 function score(p: PlayedHand, cfg: RulesConfig): number {

@@ -72,3 +72,19 @@ button:disabled { opacity: .4; }
 .overlay .box h2 { margin-top: 0; }
 .ranks-list { text-align: left; font-size: 14px; line-height: 1.9; }
 .ranks-list b { color: #a33; }
+
+/* ---------- M3：动画 / 记牌器 / 战绩 ---------- */
+.hand-play .card { animation: popIn .22s ease-out; }
+@keyframes popIn { from { transform: scale(1.5); opacity: .3; } to { transform: scale(1); opacity: 1; } }
+.topbar button.mini { padding: 2px 8px; font-size: 12px; }
+.overlay-scroll { overflow-y: auto; max-height: 92%; }
+.counter-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 8px 0; }
+.counter-cell { background: #efe9d8; border-radius: 8px; padding: 4px 0; font-size: 13px; }
+.counter-cell b { display: block; font-size: 16px; }
+.counter-cell .num { color: #277; font-weight: 700; }
+.counter-cell.zero { opacity: .35; }
+.counter-cell.level { background: #ffe9a8; }
+.counter-cell.lv { background: #ffd7c8; }
+.log-list { max-height: 200px; overflow-y: auto; text-align: left; font-size: 12px; line-height: 1.8; color: #555; }
+.rec-item { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 2px; border-bottom: 1px dashed #ccc; }
+.win-confetti { font-size: 30px; letter-spacing: 4px; }

@@ -77,6 +77,7 @@ export function tryPlay(
 
   removeMany(round.hands[seat]!, chosen.cards);
   round.trick = { lastPlay: chosen, lastSeat: seat, passes: 0 };
+  round.log.push({ seat, no: round.log.length + 1, pass: false, play: chosen });
 
   if (round.hands[seat]!.length === 0) {
     // 该座位出完
@@ -122,8 +123,28 @@ export function tryPass(match: MatchState, seat: number): ActionResult {
   } else {
     round.current = nextActive(round, seat);
   }
+  round.log.push({ seat, no: round.log.length + 1, pass: true });
   void match;
   return { ok: true };
+}
+
+/**
+ * 剩余牌统计（记牌器）：整副 108 张减去本副已打出的牌。
+ * 返回 Map：点数(2..14, 16=小王, 17=大王) → 剩余张数。
+ */
+export function remainingCards(round: RoundState): Map<number, number> {
+  const total = new Map<number, number>();
+  for (let r = 2; r <= 14; r++) total.set(r, 4);
+  total.set(16, 2);
+  total.set(17, 2);
+  for (const e of round.log) {
+    if (e.pass || !e.play) continue;
+    for (const c of e.play.cards) {
+      const v = total.get(c.rank);
+      if (v !== undefined) total.set(c.rank, v - 1);
+    }
+  }
+  return total;
 }
 
 /** 座位出完后的名次与结束判定；返回 true 表示本副已结束 */

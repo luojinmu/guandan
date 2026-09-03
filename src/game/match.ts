@@ -75,6 +75,16 @@ export interface RoundOutcome {
   doubleDown: boolean;
 }
 
+/** 对局日志条目（供记牌器 / 对局回顾使用） */
+export interface RoundLogEntry {
+  seat: number;
+  /** 序号（自 1 起） */
+  no: number;
+  /** true=过牌；false=出牌 */
+  pass: boolean;
+  play?: PlayedHand;
+}
+
 export interface RoundState {
   /** 本副级数（2..14） */
   level: number;
@@ -90,6 +100,8 @@ export interface RoundState {
   ranks: number[];
   headSeat: number;
   doneCount: number;
+  /** 本副出牌日志（含过牌），供记牌器/回顾 */
+  log: RoundLogEntry[];
 }
 
 export interface MatchState {
@@ -181,6 +193,7 @@ export function beginRound(
     ranks: [0, 0, 0, 0],
     headSeat: -1,
     doneCount: 0,
+    log: [],
   };
 
   if (match.roundNo === 1) {
