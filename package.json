@@ -1,0 +1,16 @@
+{
+  "name": "guandan",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "掼蛋游戏 - 规则引擎（纯 TS）+ Vitest 测试",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
