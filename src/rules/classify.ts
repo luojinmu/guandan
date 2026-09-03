@@ -165,14 +165,14 @@ export function classify(cards: readonly Card[], cfg: RulesConfig): PlayedHand[]
 /* ============================ 窗口与覆盖 ============================ */
 
 /** 连串窗口：slots 为槽位点数序列（0 表示 A 当 1 用，仅 A2345），top 为顶张数值 */
-interface Window { slots: number[]; top: number }
+export interface Window { slots: number[]; top: number }
 
 /**
- * 顺子窗口：
+ * 顺子窗口（导出供 legal/AI 复用）：
  * - 普通窗口：连续 [lo..hi]，lo 默认 3（straightAllowTwo 时 2 可用），hi≤14（A 只能作顶）
  * - A2345（a2345Allowed 且长度 5）：A 当 1，slots=[0,2,3,4,5]，top=5
  */
-function straightWindows(length: number, cfg: RulesConfig): Window[] {
+export function straightWindows(length: number, cfg: RulesConfig): Window[] {
   const out: Window[] = [];
   if (cfg.a2345Allowed && length === 5) out.push({ slots: [0, 2, 3, 4, 5], top: 5 });
   const loMin = cfg.straightAllowTwo ? 2 : 3;
@@ -184,8 +184,8 @@ function straightWindows(length: number, cfg: RulesConfig): Window[] {
   return out;
 }
 
-/** 连对/钢板的点数窗口（3..A，不含 2，A 只能作顶） */
-function rankGroupWindows(groups: number): Window[] {
+/** 连对/钢板的点数窗口（导出供 legal/AI 复用）：3..A，不含 2，A 只能作顶 */
+export function rankGroupWindows(groups: number): Window[] {
   const out: Window[] = [];
   for (let lo = 3; lo <= 14 - groups + 1; lo++) {
     const slots: number[] = [];

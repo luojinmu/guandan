@@ -1,0 +1,74 @@
+/* 掼蛋 · 移动优先牌桌 */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #1a5c3a;
+  color: #fff;
+  user-select: none;
+  overscroll-behavior: none;
+}
+#app { height: 100dvh; display: flex; flex-direction: column; }
+
+/* ---------- 设置页 ---------- */
+.screen { flex: 1; overflow-y: auto; padding: 16px; }
+.panel { background: rgba(0,0,0,.28); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.panel h2 { margin: 0 0 10px; font-size: 15px; }
+.seat-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.seat-tag { width: 42px; font-weight: 700; }
+select, button { font: inherit; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.35); background: #fff; color: #222; }
+button.primary { background: #ffc93c; color: #333; font-weight: 700; }
+.row-opts { display: flex; gap: 8px; flex-wrap: wrap; }
+.opts label { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,.12); padding: 6px 10px; border-radius: 8px; }
+
+/* ---------- 牌桌 ---------- */
+.table { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; font-size: 13px; background: rgba(0,0,0,.25); }
+.topbar .level-big { font-size: 17px; font-weight: 800; color: #ffd75e; }
+.status { flex: 0 0 auto; text-align: center; padding: 6px 10px; font-size: 14px; min-height: 28px; color: #ffe9b0; }
+.mid { flex: 1; display: grid; grid-template-columns: 1fr; grid-template-rows: auto 1fr; min-height: 0; position: relative; }
+.opponents { display: flex; justify-content: space-between; padding: 4px 10px; }
+.seatbox { display: flex; flex-direction: column; align-items: center; font-size: 12px; }
+.seatbox .name { font-weight: 700; }
+.seatbox .cnt { color: #ffe; }
+.cards-back { display: flex; }
+.card-back { width: 13px; height: 19px; background: linear-gradient(135deg, #5c4a3a, #8a7058); border: 1px solid #caa; border-radius: 2px; margin-left: -8px; }
+.cards-back .card-back:first-child { margin-left: 0; }
+.play-area { position: relative; display: flex; align-items: center; justify-content: center; }
+.hand-play { position: absolute; }
+.hand-play .cards-row { display: flex; }
+.play-by { position: absolute; font-size: 11px; color: #ffe; background: rgba(0,0,0,.4); padding: 2px 6px; border-radius: 8px; }
+.south { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); }
+.north { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); }
+.west { position: absolute; left: 2px; top: 50%; transform: translateY(-50%) rotate(90deg); transform-origin: left center; }
+.east { position: absolute; right: 2px; top: 50%; transform: translateY(-50%) rotate(-90deg); transform-origin: right center; }
+
+.hand-area { flex: 0 0 auto; background: rgba(0,0,0,.25); padding: 8px 6px 10px; }
+.hand-scroll { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+.card {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 44px; height: 62px; background: #fff; color: #222; border-radius: 7px;
+  border: 1px solid #bbb; margin-right: -16px; box-shadow: 0 1px 2px rgba(0,0,0,.4);
+  font-weight: 700; font-size: 14px; line-height: 1.1; position: relative; transition: transform .08s;
+}
+.card .suit { font-size: 11px; }
+.card.red { color: #d22; }
+.card.sel { transform: translateY(-16px); background: #ffe9a8; border-color: #ffc93c; }
+.card.wild { outline: 2px dashed #c93cff; }
+.card.pick { box-shadow: 0 0 0 3px #ffc93c; }
+.hand-row { display: flex; padding: 0 2px; }
+
+.btnbar { display: flex; gap: 8px; padding: 8px 10px; justify-content: center; }
+.btnbar button { flex: 1; max-width: 110px; min-height: 42px; font-size: 15px; }
+button.ghost { background: rgba(255,255,255,.9); }
+button:disabled { opacity: .4; }
+
+/* 卡片样式 */
+.toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: rgba(0,0,0,.85); padding: 8px 14px; border-radius: 20px; font-size: 13px; z-index: 9; animation: fade .1s; }
+@keyframes fade { from { opacity: 0; } }
+
+.overlay { position: absolute; inset: 0; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; z-index: 5; }
+.overlay .box { background: #f5f2e8; color: #333; border-radius: 16px; padding: 20px; width: 86%; max-width: 340px; text-align: center; }
+.overlay .box h2 { margin-top: 0; }
+.ranks-list { text-align: left; font-size: 14px; line-height: 1.9; }
+.ranks-list b { color: #a33; }

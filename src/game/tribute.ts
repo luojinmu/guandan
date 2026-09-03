@@ -89,18 +89,22 @@ function advance(match: MatchState, round: RoundState): void {
 /** 贡还全程自动执行（供 AI / 测试）：贡=最大非万能，还=允许范围内最弱牌 */
 export function autoResolveTribute(match: MatchState): void {
   const round = match.round!;
-  while (round.phase === 'tribute') {
-    const step = currentTributeStep(round);
-    if (step.type === 'give') {
-      const cands = tributeCandidates(match, round, step.seat);
-      tryTribute(match, step.seat, cands[0]!);
-    } else {
-      const giver = round.tribute!.steps[round.tributeStep - 1]!.seat;
-      const allowed = returnCandidates(match, round, step.seat, giver);
-      // 最弱牌：按点数强度升序（王最弱不可取？王最强；升序取最小）
-      const pick = allowed.slice().sort((a, b) => cardPower(a, round.level) - cardPower(b, round.level) || a.rank - b.rank)[0]!;
-      tryReturn(match, step.seat, pick);
-    }
+  while (round.phase === 'tribute') autoResolveCurrentStep(match);
+}
+
+/** 仅自动执行当前一步（供人/AI 混合场景下 AI 座位使用） */
+export function autoResolveCurrentStep(match: MatchState): void {
+  const round = match.round!;
+  const step = currentTributeStep(round);
+  if (step.type === 'give') {
+    const cands = tributeCandidates(match, round, step.seat);
+    tryTribute(match, step.seat, cands[0]!);
+  } else {
+    const giver = round.tribute!.steps[round.tributeStep - 1]!.seat;
+    const allowed = returnCandidates(match, round, step.seat, giver);
+    // 最弱牌：按点数强度升序
+    const pick = allowed.slice().sort((a, b) => cardPower(a, round.level) - cardPower(b, round.level) || a.rank - b.rank)[0]!;
+    tryReturn(match, step.seat, pick);
   }
 }
 
