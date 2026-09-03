@@ -45,6 +45,28 @@ describe('对局日志与记牌器', () => {
     expect(m.round!.log[0]!.play!.cards).toHaveLength(2);
   });
 
+  it('圈内展示状态：seatPlay/seatPassed 随动作更新，圈结束清空', () => {
+    const m = newMatch();
+    start(m, [['9H', '5H'], ['7H'], ['4H'], ['3H']], 0);
+    run(m, [
+      { s: 0, type: 'play', cards: ['9H'] },
+      { s: 1, type: 'pass' },
+    ]);
+    const t = m.round!.trick;
+    expect(t.seatPlay[0]!.type).toBe('single'); // 0 的牌留在桌面上
+    expect(t.seatPassed[1]).toBe(true); // 1 已"过"
+    expect(t.seatPlay[1]).toBeNull();
+    expect(t.seatPlay[2]).toBeNull();
+    expect(t.seatPassed[2]).toBe(false);
+    run(m, [
+      { s: 2, type: 'pass' },
+      { s: 3, type: 'pass' }, // 圈结束 → 0（仍有 5H）再领出
+    ]);
+    const t2 = m.round!.trick;
+    expect(t2.seatPlay[0]).toBeNull(); // 上一圈已清空
+    expect(t2.lastPlay).toBeNull();
+  });
+
   it('整副结束后日志完整且不影响结算', () => {
     const m = newMatch();
     start(m, [['KS'], ['3H', '8H'], ['5H', '9H'], ['4H']], 0);

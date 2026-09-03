@@ -9,7 +9,7 @@
 
 import { Card } from '../rules/cards.js';
 import { cardPower } from '../rules/power.js';
-import { MatchState, RoundState, currentTributeStep, roundRules, teamOf, isWildcardFor, tributeCandidates } from './match.js';
+import { MatchState, RoundState, currentTributeStep, newTrickState, roundRules, teamOf, isWildcardFor, tributeCandidates } from './match.js';
 
 export interface ActionResult { ok: boolean; error?: string }
 
@@ -79,7 +79,7 @@ function advance(match: MatchState, round: RoundState): void {
     round.tribute = null;
     round.tributeStep = 0;
     round.current = plan.firstSeat;
-    round.trick = { lastPlay: null, lastSeat: -1, passes: 0 };
+    round.trick = newTrickState();
   } else {
     round.current = plan.steps[round.tributeStep]!.seat;
   }

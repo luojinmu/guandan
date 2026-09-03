@@ -65,6 +65,15 @@ export interface TrickState {
   lastSeat: number;
   /** 自 lastPlay 以来连续"过"的活跃玩家数 */
   passes: number;
+  /** 当前圈内各座位最近打出的牌（未出则 null；圈结束清空） */
+  seatPlay: (PlayedHand | null)[];
+  /** 当前圈内各座位是否已表态"过"（仅展示用） */
+  seatPassed: boolean[];
+}
+
+/** 构造空圈状态 */
+export function newTrickState(): TrickState {
+  return { lastPlay: null, lastSeat: -1, passes: 0, seatPlay: [null, null, null, null], seatPassed: [false, false, false, false] };
 }
 
 export interface RoundOutcome {
@@ -189,7 +198,7 @@ export function beginRound(
     tribute: null,
     tributeStep: 0,
     current: 0,
-    trick: { lastPlay: null, lastSeat: -1, passes: 0 },
+    trick: newTrickState(),
     ranks: [0, 0, 0, 0],
     headSeat: -1,
     doneCount: 0,

@@ -7,6 +7,7 @@
 import './style.css';
 import { Card, cardLabel, rankLabel, sortByRank } from '../rules/cards.js';
 import { isWildcard } from '../rules/config.js';
+import type { RulesConfig } from '../rules/config.js';
 import { hint } from '../rules/legal.js';
 import { PlayedHand } from '../rules/types.js';
 import {
@@ -131,28 +132,47 @@ function renderSetup(): void {
   </div>`;
 }
 
-function cardHtml(c: Card, wild: boolean, selected: boolean, pick: boolean, key: string): string {
+const SUIT_SYM: Record<string, string> = { S: '♠', H: '♥', D: '♦', C: '♣', JOKER: '★' };
+const RANK_CN = ['', '头游', '二游', '三游', '末游'];
+
+function cardHtml(c: Card, wild: boolean, selected: boolean, pick: boolean, key: string, mini = false): string {
   const red = c.suit === 'H' || c.suit === 'D';
-  const suitSym = c.suit === 'JOKER' ? '★' : c.suit;
-  return `<span class="card ${red ? 'red' : ''} ${selected ? 'sel' : ''} ${wild ? 'wild' : ''} ${pick ? 'pick' : ''}" data-key="${key}">
-    <span>${rankLabel(c.rank)}</span><span class="suit">${suitSym}</span>
+  const face = c.rank === 16 ? '小' : c.rank === 17 ? '大' : rankLabel(c.rank);
+  return `<span class="card ${red ? 'red' : ''} ${selected ? 'sel' : ''} ${wild ? 'wild' : ''} ${pick ? 'pick' : ''} ${mini ? 'mini' : ''}" data-key="${key}">
+    <b>${face}</b><i>${SUIT_SYM[c.suit] ?? ''}</i>
   </span>`;
 }
 
-function backs(n: number): string {
-  let s = '';
-  for (let i = 0; i < Math.min(n, 10); i++) s += '<span class="card-back"></span>';
-  return `<span class="cards-back">${s}</span>`;
+function miniRow(p: PlayedHand): string {
+  return `<span class="trick-row">${p.cards.map((c) => cardHtml(c, false, false, false, '', true)).join('')}</span>`;
 }
 
-function seatBox(s: number): string {
-  const round = M.match!.round!;
+/** 桌面四方位座位面板：名字/张数/名次 + 本圈出的牌或"过" */
+function seatPanel(s: number, base: number, round: RoundState, cfg: RulesConfig): string {
   const cnt = round.hands[s]!.length;
-  return `<div class="seatbox">
-    <span class="name">${SEAT_NAMES[s]}${s === round.current ? ' ▶' : ''}</span>
-    <span class="cnt">${cnt === 0 ? '已出完' : `剩 ${cnt} 张${cnt <= 10 ? ' ⚠️' : ''}`}</span>
-    ${cnt > 0 ? backs(cnt) : '<span style="opacity:.4">—</span>'}
-  </div>`;
+  const out = cnt === 0;
+  const t = round.trick;
+  const actingSeat = round.phase === 'tribute'
+    ? round.tribute!.steps[round.tributeStep]!.seat
+    : round.current;
+  const acting = actingSeat === s && (round.phase !== 'roundEnd');
+  const play = t.seatPlay[s];
+  const rk = round.ranks[s] ?? 0;
+  const rankChip = rk > 0 ? `<i class="medal">${RANK_CN[rk]}</i>` : '';
+  let body: string;
+  if (out) body = '<span class="chip-fin">已出完</span>';
+  else if (play) body = miniRow(play);
+  else if (t.seatPassed[s]) body = '<span class="chip-pass">过</span>';
+  else body = '<span class="dots">…</span>';
+  return `
+    <div class="tseat t-${posClass(s, base)}${acting ? ' turn' : ''}">
+      <div class="ph">
+        <b class="pname">${SEAT_NAMES[s]}</b>
+        ${rankChip}
+        <span class="pcnt">${out ? '🏁' : cnt <= 10 && round.phase === 'play' ? `${cnt}⚠` : `${cnt}`}</span>
+      </div>
+      <div class="pbody">${body}</div>
+    </div>`;
 }
 
 function posClass(seat: number, base: number): string {
@@ -166,35 +186,24 @@ function renderTable(): void {
   const cfg = roundRules(match, round);
   const t0 = teamOf(0);
   const base = round.current >= 0 && isActive(round, round.current) ? round.current : 0;
-  const pos = (seat: number) => posClass(seat, base);
-  const order = [0, 1, 2, 3].sort((a, b) => posClass(a, base).localeCompare(posClass(b, base)));
-  const [southS, eastS, northS, westS] = [base, (base + 1) % 4, (base + 2) % 4, (base + 3) % 4];
+  const order = [0, 1, 2, 3];
+  const seatsOf = (p: string) => order.find((s) => posClass(s, base) === p)!;
 
   // 行动信息
   let actorSeat = -1;
-  let actionMode: 'play' | 'give' | 'return' = 'play';
   let status = '';
   if (round.phase === 'tribute') {
     const step = round.tribute!.steps[round.tributeStep]!;
     actorSeat = step.seat;
-    actionMode = step.type === 'give' ? 'give' : 'return';
-    status = actionMode === 'give' ? `${SEAT_NAMES[actorSeat]} 进贡：点选最大牌（万能牌不可贡）` : `${SEAT_NAMES[actorSeat]} 还贡：点选要还的牌`;
+    status = step.type === 'give'
+      ? `${SEAT_NAMES[actorSeat]} 进贡 · 点选手中最大牌（万能不可贡）`
+      : `${SEAT_NAMES[actorSeat]} 还贡 · 点选要还的牌`;
   } else if (round.phase === 'play') {
     actorSeat = round.current;
     status = actorSeat >= 0
-      ? `轮到 ${SEAT_NAMES[actorSeat]}（${M.seats[actorSeat]!.kind === 'ai' ? 'AI' : '玩家'}）${isLeading(round) ? '领出' : '跟牌'}`
+      ? `${isLeading(round) ? '🃏 自由出牌' : '↪ 跟牌'} · 轮到 ${SEAT_NAMES[actorSeat]}（${M.seats[actorSeat]!.kind === 'ai' ? 'AI' : '玩家'}）`
       : '';
   }
-
-  // 中央：最近一手
-  const last = round.trick.lastPlay;
-  const lastSeat = round.trick.lastSeat;
-  const center = `
-    <div style="position:relative;height:170px" class="play-area">
-      ${last && lastSeat >= 0
-        ? `<div class="hand-play ${pos(lastSeat)}"><div class="cards-row">${last.cards.map((c) => cardHtml(c, isWildcard(c, cfg), false, false, '')).join('')}</div></div>`
-        : '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.45">新一圈</span>'}
-    </div>`;
 
   // 底部手牌（仅当前行动的人类座位）
   let bottom = '';
@@ -202,7 +211,7 @@ function renderTable(): void {
     const hand = sortedHand(actorSeat);
     let allowed = new Set<string>();
     if (round.phase === 'tribute') {
-      const cands = actionMode === 'give'
+      const cands = round.tribute!.steps[round.tributeStep]!.type === 'give'
         ? tributeCandidates(match, round, actorSeat)
         : returnCandidates(match, round, actorSeat, round.tribute!.steps[round.tributeStep - 1]!.seat);
       allowed = new Set(cands.map(cardLabel));
@@ -211,8 +220,10 @@ function renderTable(): void {
       cardHtml(c, isWildcard(c, cfg), M.sel.includes(i), allowed.has(cardLabel(c)), `c${i}`)).join('');
     const leadNow = round.phase === 'play' && isLeading(round);
     const canPlay = M.sel.length > 0;
+    const winHint = round.phase === 'play' && !leadNow ? '<div class="win-tip">👑 压过别人的牌即可获得出牌权</div>' : '';
     bottom = `
       <div class="hand-area">
+        ${winHint}
         <div class="hand-scroll"><span class="hand-row">${hs}</span></div>
         ${round.phase === 'play' ? `
         <div class="btnbar">
@@ -223,7 +234,7 @@ function renderTable(): void {
         </div>` : ''}
       </div>`;
   } else {
-    bottom = '<div class="hand-area" style="min-height:56px"></div>';
+    bottom = '';
   }
 
   const toast = M.toast ? `<div class="toast">${esc(M.toast)}</div>` : '';
@@ -231,27 +242,34 @@ function renderTable(): void {
   app.innerHTML = `
     <div class="table">
       <div class="topbar">
-        <span>第 ${match.roundNo} 副 · 打 <b class="level-big">${levelLabel(round.level)}</b></span>
-        <span>🔴 ${levelLabel(match.teamLevels[t0])} · 🔵 ${levelLabel(match.teamLevels[t0 === 0 ? 1 : 0])}</span>
-        <span>
-          <button class="mini" data-act="counter">${M.showCounter ? '关记牌' : '记牌'}</button>
-          <button class="mini" data-act="menu">菜单</button>
-        </span>
-      </div>
-      <div class="status">${esc(status)}</div>
-      <div class="mid">
-        <div class="opponents">
-          <div style="flex:1;display:flex;justify-content:space-around;align-items:flex-start">
-            ${seatBox(eastS)}${seatBox(northS)}${seatBox(westS)}
-          </div>
+        <div class="tb-left">
+          <span class="chip">第 ${match.roundNo} 副</span>
+          <span class="chip gold">打 ${levelLabel(round.level)}</span>
         </div>
-        ${center}
+        <div class="tb-teams">
+          <span class="chip team-a">南北 ${levelLabel(match.teamLevels[t0])}</span>
+          <span class="chip team-b">东西 ${levelLabel(match.teamLevels[t0 === 0 ? 1 : 0])}</span>
+        </div>
+        <div class="tb-right">
+          <button class="mini" data-act="counter">记牌</button>
+          <button class="mini" data-act="menu">菜单</button>
+        </div>
+      </div>
+      <div class="status">${status ? `<span class="pill">${esc(status)}</span>` : ''}</div>
+      <div class="felt">
+        ${seatPanel(seatsOf('south'), base, round, cfg)}
+        ${seatPanel(seatsOf('east'), base, round, cfg)}
+        ${seatPanel(seatsOf('north'), base, round, cfg)}
+        ${seatPanel(seatsOf('west'), base, round, cfg)}
+        <div class="felt-center">
+          <b>打 ${levelLabel(round.level)}</b>
+          <span>${round.phase === 'tribute' ? '进贡阶段' : isLeading(round) ? '新一圈' : '跟牌中'}</span>
+        </div>
       </div>
       ${bottom}
       ${toast}
       ${counterHtml}
     </div>`;
-  void order; void southS;
 }
 
 /** 记牌器浮层：剩余牌统计 + 本副日志 */

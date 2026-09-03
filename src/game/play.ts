@@ -13,7 +13,7 @@ import { classify } from '../rules/classify.js';
 import { canBeat } from '../rules/compare.js';
 import { HandType, PlayedHand } from '../rules/types.js';
 import {
-  MatchState, RoundState, RoundOutcome, isActive, nextActive, partnerOf, roundRules,
+  MatchState, RoundState, RoundOutcome, isActive, newTrickState, nextActive, partnerOf, roundRules,
 } from './match.js';
 
 export interface ActionResult { ok: boolean; error?: string; roundOver?: boolean }
@@ -76,7 +76,9 @@ export function tryPlay(
   if (!chosen) return { ok: false, error: '所选牌型不合法' };
 
   removeMany(round.hands[seat]!, chosen.cards);
-  round.trick = { lastPlay: chosen, lastSeat: seat, passes: 0 };
+  round.trick = { ...round.trick, lastPlay: chosen, lastSeat: seat, passes: 0 };
+  round.trick.seatPlay[seat] = chosen;
+  round.trick.seatPassed[seat] = false;
   round.log.push({ seat, no: round.log.length + 1, pass: false, play: chosen });
 
   if (round.hands[seat]!.length === 0) {
@@ -104,6 +106,7 @@ export function tryPass(match: MatchState, seat: number): ActionResult {
   if (isLeading(round)) return { ok: false, error: '领出者不能过牌' };
 
   round.trick.passes += 1;
+  round.trick.seatPassed[seat] = true;
   const active = [0, 1, 2, 3].filter((s) => isActive(round, s));
   // 需表态人数：除 lastSeat（若仍活跃）外的全部活跃玩家
   const othersCount = active.length - (isActive(round, round.trick.lastSeat) ? 1 : 0);
@@ -118,7 +121,7 @@ export function tryPass(match: MatchState, seat: number): ActionResult {
       const p = partnerOf(winner);
       leader = isActive(round, p) ? p : nextActive(round, p);
     }
-    round.trick = { lastPlay: null, lastSeat: -1, passes: 0 };
+    round.trick = newTrickState();
     round.current = leader;
   } else {
     round.current = nextActive(round, seat);
